@@ -5,7 +5,26 @@
 #include <driver_functions.h>
 
 #include "CycleTimer.h"
+/*
+---------------------------------------------------------
+Found 1 CUDA devices
+Device 0: NVIDIA GeForce RTX 2080 Ti
+   SMs:        68
+   Global mem: 11020 MB
+   CUDA Cap:   7.5
+---------------------------------------------------------
+Running 3 timing tests:
+Effective BW by CUDA saxpy: 276.159 ms  0.055 ms                [4.047 GB/s]
+CPU saxpy: 132.548 ms
+Effective BW by CUDA saxpy: 270.723 ms  0.020 ms                [4.128 GB/s]
+CPU saxpy: 129.830 ms
+Effective BW by CUDA saxpy: 480.979 ms  0.061 ms                [2.324 GB/s]
+CPU saxpy: 315.650 ms
 
+可以看到，
+在saxpy例子中，gpu运算远高于cpu运算 约是50倍；
+gpu运算中，cudaMemcpy是比较耗时的
+*/
 
 // return GB/sec
 float GBPerSec(int bytes, float sec) {
@@ -29,6 +48,20 @@ saxpy_kernel(int N, float alpha, float* x, float* y, float* result) {
     // that are not a multiple of the thread block size (blockDim.x)
     if (index < N)
        result[index] = alpha * x[index] + y[index];
+}
+
+
+void saxpyCPU(int N, float alpha, const float* xarray, const float* yarray, float* resultarray) {
+    double startTime = CycleTimer::currentSeconds();
+
+    for (int i = 0; i < N; ++i) {
+        resultarray[i] = alpha * xarray[i] + yarray[i];
+    }
+
+    double endTime = CycleTimer::currentSeconds();
+    double overallDuration = endTime - startTime;
+    // printf("Effective BW by CUDA saxpy: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, GBPerSec(totalBytes, overallDuration));
+    printf("CPU saxpy: %.3f ms\n", 1000.f * overallDuration);
 }
 
 
@@ -75,23 +108,30 @@ void saxpyCuda(int N, float alpha, float* xarray, float* yarray, float* resultar
     //
     // https://devblogs.nvidia.com/easy-introduction-cuda-c-and-c/
     //
-        
+    
+    cudaMalloc(&device_x, N * sizeof(float));
+    cudaMalloc(&device_y, N * sizeof(float));
+    cudaMalloc(&device_result, N * sizeof(float));
+
     // start timing after allocation of device memory
     double startTime = CycleTimer::currentSeconds();
 
     //
     // CS149 TODO: copy input arrays to the GPU using cudaMemcpy
     //
-
+    cudaMemcpy(device_x, xarray, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_y, yarray, N * sizeof(float), cudaMemcpyHostToDevice);
    
+    double startRunTime = CycleTimer::currentSeconds();
     // run CUDA kernel. (notice the <<< >>> brackets indicating a CUDA
     // kernel launch) Execution on the GPU occurs here.
     saxpy_kernel<<<blocks, threadsPerBlock>>>(N, alpha, device_x, device_y, device_result);
+    double endRunTime = CycleTimer::currentSeconds();
 
     //
     // CS149 TODO: copy result from GPU back to CPU using cudaMemcpy
     //
-
+    cudaMemcpy(resultarray, device_result, N * sizeof(float), cudaMemcpyDeviceToHost);
     
     // end timing after result has been copied back into host memory
     double endTime = CycleTimer::currentSeconds();
@@ -103,7 +143,8 @@ void saxpyCuda(int N, float alpha, float* xarray, float* yarray, float* resultar
     }
 
     double overallDuration = endTime - startTime;
-    printf("Effective BW by CUDA saxpy: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, GBPerSec(totalBytes, overallDuration));
+    double runDuration = endRunTime - startRunTime;
+    printf("Effective BW by CUDA saxpy: %.3f ms\t%.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, 1000.f * runDuration, GBPerSec(totalBytes, overallDuration));
 
     //
     // CS149 TODO: free memory buffers on the GPU using cudaFree

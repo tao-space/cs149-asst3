@@ -4,6 +4,7 @@
 #include <string>
 
 void saxpyCuda(int N, float alpha, float* x, float* y, float* result);
+void saxpyCPU(int N, float alpha, const float* x, const float* y, float* result);
 void printCudaInfo();
 
 
@@ -57,8 +58,10 @@ int main(int argc, char** argv)
     
     printf("Running 3 timing tests:\n");
     for (int i=0; i<3; i++) {
-      saxpyCuda(N, alpha, xarray, yarray, resultarray);
+        saxpyCuda(N, alpha, xarray, yarray, resultarray);
+        saxpyCPU(N, alpha, xarray, yarray, resultarray);
     }
+
 
     delete [] xarray;
     delete [] yarray;
